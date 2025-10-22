@@ -8,5 +8,7 @@
 	<array>
 		<string>group.appGroupFlutter.pushengage.com</string>
 	</array>
+	<key>get-task-allow</key>
+	<true/>
 </dict>
 </plist>

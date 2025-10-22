@@ -50,7 +50,9 @@ class _TriggerCampaignEntryState extends State<TriggerCampaignEntry> {
     PushEngageResult result =
         await PushEngage.sendTriggerEvent(triggerCampaign);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(result.isSuccess ? result.data : result.error)),
+      SnackBar(
+          content:
+              Text(result.isSuccess ? result.data : result.error.toString())),
     );
   }
 

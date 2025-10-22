@@ -1,13 +1,11 @@
 package com.pushengage.pushengage_flutter_sdk
 
-import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Build
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
+import androidx.activity.ComponentActivity
+import com.pushengage.pushengage.Callbacks.PushEngagePermissionCallback
 import com.pushengage.pushengage.Callbacks.PushEngageResponseCallback
 import com.pushengage.pushengage.PushEngage
 import com.pushengage.pushengage.model.request.AddDynamicSegmentRequest
@@ -31,13 +29,11 @@ class PushEngageFlutterSdkPlugin :
         FlutterPlugin,
         MethodCallHandler,
         ActivityAware,
-        PluginRegistry.RequestPermissionsResultListener,
         PluginRegistry.NewIntentListener {
 
     private lateinit var channel: MethodChannel
     private lateinit var context: Context
     private lateinit var activity: Activity
-    private var permissionResult: Result? = null
 
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
         channel = MethodChannel(flutterPluginBinding.binaryMessenger, "PushEngage")
@@ -134,23 +130,101 @@ class PushEngageFlutterSdkPlugin :
             }
             "PushEngage#getSubscriberDetails" -> {
                 val subscriberAttributes = call.argument<List<String>>("values")
-                PushEngage.getSubscriberDetails(
-                        subscriberAttributes,
+                
+                // First check subscription status
+                PushEngage.getSubscriptionStatus(
                         object : PushEngageResponseCallback {
                             override fun onSuccess(responseObject: Any?) {
-                                val jsonResponse =
-                                        JSONObject(responseObject as Map<*, *>).toString()
-                                result.success(jsonResponse)
-                            }
+                                val isSubscribed = responseObject as? Boolean ?: false
+                                if (isSubscribed) {
+                                    // Only get subscriber details if subscribed
+                                    PushEngage.getSubscriberDetails(
+                                            subscriberAttributes,
+                                            object : PushEngageResponseCallback {
+                                                override fun onSuccess(responseObject: Any?) {
+                                                    val jsonResponse =
+                                                            JSONObject(responseObject as Map<*, *>).toString()
+                                                    result.success(jsonResponse)
+                                                }
 
-                            override fun onFailure(errorCode: Int, errorMessage: String) {
-                                result.error(errorCode.toString(), errorMessage, null)
+                                                override fun onFailure(errorCode: Int, errorMessage: String) {
+                                                    result.error(errorCode.toString(), errorMessage, null)
+                                                }
+                                            }
+                                    )
+                                } else {
+                                    // Return null if not subscribed
+                                    result.success(null)
+                                }
+                            }
+                            
+                            override fun onFailure(errorCode: Int?, errorMessage: String?) {
+                                result.error("SUBSCRIPTION_STATUS_ERROR", errorMessage ?: "Failed to get subscription status", errorCode)
                             }
                         }
                 )
             }
             "PushEngage#requestNotificationPermission" -> {
                 requestNotificationPermission(result)
+            }
+            "PushEngage#getNotificationPermissionStatus" -> {
+                val status = PushEngage.getNotificationPermissionStatus()
+                result.success(status)
+            }
+            "PushEngage#getSubscriptionStatus" -> {
+                PushEngage.getSubscriptionStatus(
+                        object : PushEngageResponseCallback {
+                            override fun onSuccess(responseObject: Any?) {
+                                result.success(responseObject)
+                            }
+                            
+                            override fun onFailure(errorCode: Int?, errorMessage: String?) {
+                                result.error("SUBSCRIPTION_STATUS_ERROR", errorMessage ?: "Failed to get subscription status", errorCode)
+                            }
+                        }
+                )
+            }
+            "PushEngage#getSubscriptionNotificationStatus" -> {
+                PushEngage.getSubscriptionNotificationStatus(
+                        object : PushEngageResponseCallback {
+                            override fun onSuccess(responseObject: Any?) {
+                                result.success(responseObject)
+                            }
+                            
+                            override fun onFailure(errorCode: Int?, errorMessage: String?) {
+                                result.error("SUBSCRIPTION_NOTIFICATION_STATUS_ERROR", errorMessage ?: "Failed to get subscription notification status", errorCode)
+                            }
+                        }
+                )
+            }
+            "PushEngage#getSubscriberId" -> {
+                PushEngage.getSubscriberId(
+                        object : PushEngageResponseCallback {
+                            override fun onSuccess(responseObject: Any?) {
+                                result.success(responseObject)
+                            }
+                            
+                            override fun onFailure(errorCode: Int?, errorMessage: String?) {
+                                result.error("SUBSCRIBER_ID_ERROR", errorMessage ?: "Failed to get subscriber ID", errorCode)
+                            }
+                        }
+                )
+            }
+            "PushEngage#unsubscribe" -> {
+                PushEngage.unsubscribe(
+                        object : PushEngageResponseCallback {
+                            override fun onSuccess(responseObject: Any?) {
+                                result.success(responseObject)
+                            }
+                            
+                            override fun onFailure(errorCode: Int?, errorMessage: String?) {
+                                result.error("UNSUBSCRIBE_ERROR", errorMessage ?: "Failed to unsubscribe", errorCode)
+                            }
+                        }
+                )
+            }
+            "PushEngage#subscribe" -> {
+                subscribe(result)
             }
             "PushEngage#getSubscriberAttributes" -> {
                 PushEngage.getSubscriberAttributes(
@@ -308,7 +382,6 @@ class PushEngageFlutterSdkPlugin :
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         activity = binding.activity
-        binding.addRequestPermissionsResultListener(this)
         binding.addOnNewIntentListener(this)
         handleIntent(activity.intent)
     }
@@ -323,44 +396,51 @@ class PushEngageFlutterSdkPlugin :
     override fun onDetachedFromActivity() {}
 
     private fun requestNotificationPermission(result: Result) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
-                            activity,
-                            Manifest.permission.POST_NOTIFICATIONS
-                    ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                permissionResult = result
-                ActivityCompat.requestPermissions(
-                        activity,
-                        arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                        100
+        try {
+            if (activity is ComponentActivity) {
+                // For Android 13+ (API 33), the SDK will show permission dialog
+                // For older versions, permission is automatically granted
+                PushEngage.requestNotificationPermission(
+                    activity as ComponentActivity,
+                    object : PushEngagePermissionCallback {
+                        override fun onPermissionResult(granted: Boolean, error: kotlin.Error?) {
+                            if (error != null) {
+                                result.error("PERMISSION_ERROR", error.toString(), null)
+                            } else {
+                                result.success(granted)
+                            }
+                        }
+                    }
                 )
             } else {
-                // Permission already granted
-                result.success(true)
+                result.error("INVALID_ACTIVITY", "Activity is not a ComponentActivity: ${activity::class.java.simpleName}", null)
             }
-        } else {
-            // For versions below Android 13, notification permission is granted at install time.
-            result.success(true)
+        } catch (e: Exception) {
+            result.error("PERMISSION_REQUEST_FAILED", e.message ?: "Unknown error", null)
         }
     }
 
-    override fun onRequestPermissionsResult(
-            requestCode: Int,
-            permissions: Array<out String>,
-            grantResults: IntArray
-    ): Boolean {
-        when (requestCode) {
-            100 -> { // The request code used in requestPermissions
-                val isGranted =
-                        grantResults.isNotEmpty() &&
-                                grantResults[0] == PackageManager.PERMISSION_GRANTED
-                permissionResult?.success(isGranted)
-                PushEngage.subscribe()
-                return true
+    private fun subscribe(result: Result) {
+        try {
+            if (activity is ComponentActivity) {
+                PushEngage.subscribe(
+                    activity as ComponentActivity,
+                    object : PushEngageResponseCallback {
+                        override fun onSuccess(responseObject: Any?) {
+                            result.success(responseObject)
+                        }
+                        
+                        override fun onFailure(errorCode: Int?, errorMessage: String?) {
+                            result.error("SUBSCRIBE_ERROR", errorMessage ?: "Failed to subscribe", errorCode)
+                        }
+                    }
+                )
+            } else {
+                result.error("INVALID_ACTIVITY", "Activity is not a ComponentActivity: ${activity::class.java.simpleName}", null)
             }
+        } catch (e: Exception) {
+            result.error("SUBSCRIBE_ERROR", "Failed to subscribe: ${e.message}", null)
         }
-        return false
     }
 
     private fun addAlert(map: Map<String, Any>, result: Result) {
@@ -443,3 +523,5 @@ class PushEngageFlutterSdkPlugin :
         return false
     }
 }
+
+

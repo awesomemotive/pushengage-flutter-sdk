@@ -2,7 +2,7 @@ import Flutter
 import UIKit
 import PushEngage
 
-@UIApplicationMain
+@main
 @objc class AppDelegate: FlutterAppDelegate {
     
     override init() {

@@ -88,7 +88,9 @@ class _AlertEntryScreenState extends State<AlertEntryScreen> {
 
     PushEngageResult result = await PushEngage.addAlert(alert);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(result.isSuccess ? result.data : result.error)),
+      SnackBar(
+          content:
+              Text(result.isSuccess ? result.data : result.error.toString())),
     );
   }
 

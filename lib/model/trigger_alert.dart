@@ -54,8 +54,6 @@ extension TriggerAlertTypeExtension on TriggerAlertType {
         return 'priceDrop';
       case TriggerAlertType.inventory:
         return 'inventory';
-      default:
-        return '';
     }
   }
 }
@@ -73,8 +71,6 @@ extension TriggerAlertAvailabilityTypeExtension
         return 'inStock';
       case TriggerAlertAvailabilityType.outOfStock:
         return 'outOfStock';
-      default:
-        return '';
     }
   }
 }

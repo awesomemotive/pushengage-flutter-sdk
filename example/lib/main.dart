@@ -25,7 +25,7 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> initPlatformState() async {
-    PushEngage.setAppId("42ff42bc-32e5-4188-b65f-d3e5412c5ba9");
+    PushEngage.setAppId("YOUR_APP_ID");
   }
 
   @override

@@ -1,11 +1,10 @@
 import 'dart:async';
-import 'dart:ffi';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:pushengage_flutter_sdk/helper/pushengage_result.dart';
-import 'package:pushengage_flutter_sdk/model/DynamicSegment.dart';
-import 'package:pushengage_flutter_sdk/model/trigger_campaign.dart';
+import 'package:pushengage_flutter_sdk/model/dynamic_segment.dart';
 import 'package:pushengage_flutter_sdk/pushengage_flutter_sdk.dart';
 import 'package:pushengage_flutter_sdk_example/goal.dart';
 import 'package:pushengage_flutter_sdk_example/trigger_entry.dart';
@@ -22,7 +21,13 @@ enum PushEngageAction {
   getSubscriberAttributes,
   setSubscriberAttributes,
   sendGoal,
-  triggerCampaigns
+  triggerCampaigns,
+  getNotificationPermissionStatus,
+  getSubscriptionStatus,
+  getSubscriptionNotificationStatus,
+  getSubscriberId,
+  unsubscribe,
+  subscribe
 }
 
 extension PushEngageActionString on PushEngageAction {
@@ -50,6 +55,18 @@ extension PushEngageActionString on PushEngageAction {
         return "Send Goal";
       case PushEngageAction.triggerCampaigns:
         return "Trigger Campaigns";
+      case PushEngageAction.getNotificationPermissionStatus:
+        return "Get Notification Permission Status";
+      case PushEngageAction.getSubscriptionStatus:
+        return "Get Subscription Status";
+      case PushEngageAction.getSubscriptionNotificationStatus:
+        return "Get Subscription Notification Status";
+      case PushEngageAction.getSubscriberId:
+        return "Get Subscriber ID";
+      case PushEngageAction.unsubscribe:
+        return "Unsubscribe";
+      case PushEngageAction.subscribe:
+        return "Subscribe";
       default:
         return "";
     }
@@ -97,6 +114,25 @@ class _HomeState extends State<Home> {
     });
   }
 
+  void _copyToClipboard() {
+    if (responseText.isNotEmpty) {
+      Clipboard.setData(ClipboardData(text: responseText));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Text copied to clipboard!'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No text to copy!'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -120,16 +156,34 @@ class _HomeState extends State<Home> {
         children: [
           Padding(
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-              child: Container(
-                alignment: Alignment.centerLeft,
-                child: const Text(
-                  'Result',
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Result',
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      _copyToClipboard();
+                    },
+                    icon: const Icon(Icons.copy, size: 16),
+                    label: const Text('Copy'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color.fromARGB(255, 34, 74, 219),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                  ),
+                ],
               )),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
@@ -211,8 +265,16 @@ class _HomeState extends State<Home> {
     );
   }
 
-  void handleNotificationPermissionRequest() {
-    PushEngage.requestNotificationPermission();
+  void handleNotificationPermissionRequest() async {
+    final result = await PushEngage.requestNotificationPermission();
+    switch (result.status) {
+      case PushEngageResultStatus.success:
+        updateResponseText("Permission granted: ${result.data}");
+        break;
+      case PushEngageResultStatus.failure:
+        updateResponseText("Permission request failed: ${result.error}");
+        break;
+    }
   }
 
   Future<String?> showInputDialog() async {
@@ -423,7 +485,8 @@ class _HomeState extends State<Home> {
             updateResponseText(result.data?.toString() ?? "Attributes set");
             break;
           case PushEngageResultStatus.failure:
-            updateResponseText(result.error ?? "Failed to set attributes");
+            updateResponseText(
+                result.error?.toString() ?? "Failed to set attributes");
             break;
         }
         break;
@@ -434,6 +497,82 @@ class _HomeState extends State<Home> {
       case PushEngageAction.triggerCampaigns:
         Navigator.push(context,
             MaterialPageRoute(builder: (context) => TriggerCampaignsPage()));
+        break;
+      case PushEngageAction.getNotificationPermissionStatus:
+        final result = await PushEngage.getNotificationPermissionStatus();
+        switch (result.status) {
+          case PushEngageResultStatus.success:
+            updateResponseText("Permission status: ${result.data}");
+            break;
+          case PushEngageResultStatus.failure:
+            updateResponseText(
+                "Failed to get permission status: ${result.error}");
+            break;
+        }
+        break;
+      case PushEngageAction.getSubscriptionStatus:
+        final result = await PushEngage.getSubscriptionStatus();
+        switch (result.status) {
+          case PushEngageResultStatus.success:
+            updateResponseText(
+                "Subscription status: ${(result.data ?? false) ? 'Subscribed' : 'Not Subscribed'}");
+            break;
+          case PushEngageResultStatus.failure:
+            updateResponseText(
+                "Failed to get subscription status: ${result.error}");
+            break;
+        }
+        break;
+      case PushEngageAction.getSubscriptionNotificationStatus:
+        final result = await PushEngage.getSubscriptionNotificationStatus();
+        switch (result.status) {
+          case PushEngageResultStatus.success:
+            updateResponseText(
+                "Can receive notifications: ${(result.data ?? false) ? 'Yes' : 'No'}");
+            break;
+          case PushEngageResultStatus.failure:
+            updateResponseText(
+                "Failed to get subscription notification status: ${result.error}");
+            break;
+        }
+        break;
+      case PushEngageAction.getSubscriberId:
+        final result = await PushEngage.getSubscriberId();
+        switch (result.status) {
+          case PushEngageResultStatus.success:
+            final subscriberId = result.data;
+            if (subscriberId != null) {
+              updateResponseText("Subscriber ID: $subscriberId");
+            } else {
+              updateResponseText("User is not subscribed");
+            }
+            break;
+          case PushEngageResultStatus.failure:
+            updateResponseText("Failed to get subscriber ID: ${result.error}");
+            break;
+        }
+        break;
+      case PushEngageAction.unsubscribe:
+        final result = await PushEngage.unsubscribe();
+        switch (result.status) {
+          case PushEngageResultStatus.success:
+            updateResponseText("User unsubscribed successfully");
+            break;
+          case PushEngageResultStatus.failure:
+            updateResponseText("Failed to unsubscribe: ${result.error}");
+            break;
+        }
+        break;
+      case PushEngageAction.subscribe:
+        final result = await PushEngage.subscribe();
+        switch (result.status) {
+          case PushEngageResultStatus.success:
+            updateResponseText("User subscribed successfully");
+            break;
+          case PushEngageResultStatus.failure:
+            updateResponseText("Failed to subscribe: ${result.error}");
+            break;
+        }
         break;
       default:
         break;
