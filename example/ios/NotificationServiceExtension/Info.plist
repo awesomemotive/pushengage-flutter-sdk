@@ -11,5 +11,9 @@
 	</dict>
 	<key>PushEngage_App_Group_Key</key>
 	<string>group.appGroupFlutter.pushengage.com</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
 </dict>
 </plist>

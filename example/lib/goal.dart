@@ -29,7 +29,9 @@ class _SendGoalPageState extends State<SendGoalPage> {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(result.isSuccess ? result.data : result.error)),
+      SnackBar(
+          content:
+              Text(result.isSuccess ? result.data : result.error.toString())),
     );
   }
 

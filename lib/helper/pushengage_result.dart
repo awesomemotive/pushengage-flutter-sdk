@@ -2,7 +2,7 @@ enum PushEngageResultStatus { success, failure }
 
 class PushEngageResult<T> {
   final T? data;
-  final String? error;
+  final Object? error;
   final PushEngageResultStatus status;
 
   PushEngageResult._({this.data, this.error, required this.status});
@@ -12,7 +12,7 @@ class PushEngageResult<T> {
         data: data, error: null, status: PushEngageResultStatus.success);
   }
 
-  factory PushEngageResult.failure(String error) {
+  factory PushEngageResult.failure(Object error) {
     return PushEngageResult._(
         data: null, error: error, status: PushEngageResultStatus.failure);
   }

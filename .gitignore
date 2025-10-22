@@ -25,3 +25,7 @@ migrate_working_dir/
 **/doc/api/
 .dart_tool/
 build/
+
+# Firebase configuration (project-specific)
+**/google-services.json
+**/GoogleService-Info.plist

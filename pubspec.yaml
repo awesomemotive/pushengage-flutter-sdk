@@ -1,7 +1,7 @@
 name: pushengage_flutter_sdk
 description: PushEngage Flutter Plugin allows you to integrate Push Notification service into your Flutter application.
 
-version: 0.0.1
+version: 0.0.2
 homepage: https://github.com/awesomemotive/pushengage-flutter-sdk
 repository: https://github.com/awesomemotive/pushengage-flutter-sdk
 

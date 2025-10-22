@@ -4,7 +4,7 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 import 'package:pushengage_flutter_sdk/helper/logger.dart';
-import 'package:pushengage_flutter_sdk/model/DynamicSegment.dart';
+import 'package:pushengage_flutter_sdk/model/dynamic_segment.dart';
 import 'package:pushengage_flutter_sdk/model/goal.dart';
 import 'package:pushengage_flutter_sdk/model/trigger_alert.dart';
 import 'package:pushengage_flutter_sdk/model/trigger_campaign.dart';
@@ -13,7 +13,7 @@ import 'package:pushengage_flutter_sdk/helper/pushengage_result.dart';
 class PushEngage {
   static const MethodChannel _channel = MethodChannel('PushEngage');
   static Stream<Map<String, dynamic>>? _deepLinkStream;
-  static const _sdkVersion = "0.0.1";
+  static const _sdkVersion = "0.0.2";
 
   /// A static getter that returns a stream of deep link data.
   ///
@@ -105,7 +105,7 @@ class PushEngage {
             await _channel.invokeMethod('PushEngage#getDeviceTokenHash');
         return PushEngageResult.success(deviceTokenHash);
       } catch (e) {
-        return PushEngageResult.failure(e.toString());
+        return PushEngageResult.failure(e);
       }
     }
     return PushEngageResult.failure('Platform is not Android');
@@ -154,7 +154,7 @@ class PushEngage {
           {'status': status == TriggerStatusType.enabled});
       return PushEngageResult.success(result);
     } catch (e) {
-      return PushEngageResult.failure(e.toString());
+      return PushEngageResult.failure(e);
     }
   }
 
@@ -175,7 +175,7 @@ class PushEngage {
           'PushEngage#sendTriggerEvent', trigger.toMap());
       return PushEngageResult.success(result);
     } catch (e) {
-      return PushEngageResult.failure(e.toString());
+      return PushEngageResult.failure(e);
     }
   }
 
@@ -195,7 +195,7 @@ class PushEngage {
       return PushEngageResult.success(result);
     } catch (e) {
       DebugLogger.log('Unexpected error: $e');
-      return PushEngageResult.failure(e.toString());
+      return PushEngageResult.failure(e);
     }
   }
 
@@ -215,7 +215,7 @@ class PushEngage {
       return PushEngageResult.success(result);
     } catch (e) {
       DebugLogger.log('Unexpected error: $e');
-      return PushEngageResult.failure(e.toString());
+      return PushEngageResult.failure(e);
     }
   }
 
@@ -237,7 +237,7 @@ class PushEngage {
       return PushEngageResult.success(decodedData);
     } catch (e) {
       DebugLogger.log('Unexpected error: $e');
-      return PushEngageResult.failure(e.toString());
+      return PushEngageResult.failure(e);
     }
   }
 
@@ -266,6 +266,159 @@ class PushEngage {
     }
   }
 
+  /// Gets the current notification permission status.
+  ///
+  /// Returns a [PushEngageResult] containing a string indicating the current
+  /// notification permission state:
+  /// - "granted": The application is authorized to post user notifications
+  /// - "denied": The application is not authorized to post user notifications
+  ///
+  /// This method works synchronously and returns the current system-level
+  /// notification permission status.
+  static Future<PushEngageResult<String>>
+      getNotificationPermissionStatus() async {
+    try {
+      final String status = await _channel.invokeMethod<String>(
+              'PushEngage#getNotificationPermissionStatus') ??
+          'denied';
+      return PushEngageResult.success(status);
+    } catch (e) {
+      return PushEngageResult.failure(e);
+    }
+  }
+
+  /// Gets the current subscription status for push notifications.
+  ///
+  /// This method checks if the user is subscribed to the push notification
+  /// service by examining various conditions including:
+  /// - Site status (active/inactive)
+  /// - Manual unsubscription status
+  /// - Notification permission status
+  /// - Subscriber hash existence
+  /// - Remote subscription flags (has_unsubscribed, notification_disabled)
+  ///
+  /// Returns:
+  /// - `true`: User is subscribed to push notifications
+  /// - `false`: User is not subscribed (unsubscribed or never subscribed)
+  ///
+  /// The method performs both local and remote checks to determine the
+  /// accurate subscription status.
+  static Future<PushEngageResult<bool>> getSubscriptionStatus() async {
+    try {
+      final bool isSubscribed = await _channel
+              .invokeMethod<bool>('PushEngage#getSubscriptionStatus') ??
+          false;
+      return PushEngageResult.success(isSubscribed);
+    } catch (e) {
+      return PushEngageResult.failure(e);
+    }
+  }
+
+  /// Gets the current subscription notification status.
+  ///
+  /// This method checks if the user is both subscribed to push notifications AND
+  /// has system notification permission granted. This represents the complete
+  /// ability to receive push notifications. The implementation matches iOS logic
+  /// by first checking subscription status and then notification permissions.
+  ///
+  /// Returns:
+  /// - `true`: User can receive notifications (subscribed AND permission granted)
+  /// - `false`: User cannot receive notifications (not subscribed or permission denied)
+  ///
+  /// This method combines the results of [getSubscriptionStatus] and
+  /// [getNotificationPermissionStatus] to provide a comprehensive status
+  /// indicating whether the user can actually receive push notifications.
+  static Future<PushEngageResult<bool>>
+      getSubscriptionNotificationStatus() async {
+    try {
+      final bool canReceiveNotifications = await _channel.invokeMethod<bool>(
+              'PushEngage#getSubscriptionNotificationStatus') ??
+          false;
+      return PushEngageResult.success(canReceiveNotifications);
+    } catch (e) {
+      return PushEngageResult.failure(e);
+    }
+  }
+
+  /// Gets the unique subscriber ID for a user.
+  ///
+  /// Use this method to retrieve the unique subscriber ID for a user. PushEngage
+  /// generates this ID for every user based on their subscription data. Sometimes,
+  /// this ID is referred to as the 'subscriber_hash'. The subscriber ID remains
+  /// consistent unless there's a change in the user's subscription.
+  ///
+  /// Returns:
+  /// - `String`: The subscriber ID if the user is subscribed and has a valid hash
+  /// - `null`: If the user is not subscribed or doesn't have a valid hash
+  ///
+  /// The method first checks the subscription status using [getSubscriptionStatus]
+  /// and only returns the subscriber hash if the user is currently subscribed.
+  static Future<PushEngageResult<String?>> getSubscriberId() async {
+    try {
+      final String? subscriberId =
+          await _channel.invokeMethod<String?>('PushEngage#getSubscriberId');
+      return PushEngageResult.success(subscriberId);
+    } catch (e) {
+      return PushEngageResult.failure(e);
+    }
+  }
+
+  /// Manually unsubscribes the user from push notifications.
+  ///
+  /// This method unsubscribes the user from receiving push notifications while
+  /// preserving their subscription record. The user can be re-subscribed later
+  /// using the subscribe() method.
+  ///
+  /// The method performs the following operations:
+  /// - Sets the manually unsubscribed flag locally
+  /// - Updates the server with the unsubscribed status
+  /// - Reverts local changes if the server update fails
+  ///
+  /// Returns:
+  /// - `true`: Unsubscribe operation completed successfully
+  /// - Error: If the unsubscribe operation failed
+  ///
+  /// If the user doesn't have a valid subscription hash, the operation
+  /// succeeds immediately without making server calls.
+  static Future<PushEngageResult<bool>> unsubscribe() async {
+    try {
+      final bool success =
+          await _channel.invokeMethod<bool>('PushEngage#unsubscribe') ?? false;
+      return PushEngageResult.success(success);
+    } catch (e) {
+      return PushEngageResult.failure(e);
+    }
+  }
+
+  /// Manually subscribes the user to push notifications.
+  ///
+  /// This method subscribes the user to push notifications. The implementation
+  /// matches iOS logic for cross-platform consistency. It checks permission status
+  /// and subscriber hash to determine the appropriate action.
+  ///
+  /// The method performs the following operations:
+  /// - Checks notification permission status and subscriber hash
+  /// - If permission is granted AND subscriber data exists: updates subscription status
+  /// - If permission is not granted: requests permission first, then adds subscriber
+  /// - If subscriber data doesn't exist: calls add subscriber API
+  /// - Handles 404 responses by retrying the add subscriber process
+  ///
+  /// Returns:
+  /// - `true`: Subscribe operation completed successfully
+  /// - Error: If the subscribe operation failed
+  ///
+  /// The method automatically handles permission requests and may show the
+  /// system permission dialog if notification permission is not granted.
+  static Future<PushEngageResult<bool>> subscribe() async {
+    try {
+      final bool success =
+          await _channel.invokeMethod<bool>('PushEngage#subscribe') ?? false;
+      return PushEngageResult.success(success);
+    } catch (e) {
+      return PushEngageResult.failure(e);
+    }
+  }
+
   /// Retrieves the attributes of a subscriber.
   ///
   /// This method invokes the 'PushEngage#getSubscriberAttributes' method
@@ -286,7 +439,7 @@ class PushEngage {
         return PushEngageResult.failure('Unexpected response');
       }
     } catch (e) {
-      return PushEngageResult.failure(e.toString());
+      return PushEngageResult.failure(e);
     }
   }
 
@@ -305,7 +458,7 @@ class PushEngage {
           .invokeMethod('PushEngage#addSegment', {'segments': segments});
       return PushEngageResult.success(result);
     } catch (e) {
-      return PushEngageResult.failure(e.toString());
+      return PushEngageResult.failure(e);
     }
   }
 
@@ -323,7 +476,7 @@ class PushEngage {
           .invokeMethod('PushEngage#removeSegment', {'segments': segments});
       return PushEngageResult.success(result);
     } catch (e) {
-      return PushEngageResult.failure(e.toString());
+      return PushEngageResult.failure(e);
     }
   }
 
@@ -349,7 +502,7 @@ class PushEngage {
       );
       return PushEngageResult.success(result);
     } catch (e) {
-      return PushEngageResult.failure(e.toString());
+      return PushEngageResult.failure(e);
     }
   }
 
@@ -375,7 +528,7 @@ class PushEngage {
           {'attributes': attributesJsonString});
       return PushEngageResult.success(result);
     } catch (e) {
-      return PushEngageResult.failure(e.toString());
+      return PushEngageResult.failure(e);
     }
   }
 
@@ -395,7 +548,7 @@ class PushEngage {
           'PushEngage#deleteSubscriberAttributes', {'attributes': attributes});
       return PushEngageResult.success(result);
     } catch (e) {
-      return PushEngageResult.failure(e.toString());
+      return PushEngageResult.failure(e);
     }
   }
 
@@ -412,7 +565,7 @@ class PushEngage {
           .invokeMethod('PushEngage#addProfileId', {'profileId': profileId});
       return PushEngageResult.success(result);
     } catch (e) {
-      return PushEngageResult.failure(e.toString());
+      return PushEngageResult.failure(e);
     }
   }
 
@@ -436,7 +589,7 @@ class PushEngage {
           {'attributes': attributesJsonString});
       return PushEngageResult.success(result);
     } catch (e) {
-      return PushEngageResult.failure(e.toString());
+      return PushEngageResult.failure(e);
     }
   }
 }

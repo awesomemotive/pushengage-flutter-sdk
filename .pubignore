@@ -1,0 +1,19 @@
+# Exclude example app configuration files from published package
+example/android/app/google-services.json
+example/android/local.properties
+
+# Exclude example app build artifacts
+example/build/
+example/android/build/
+example/ios/build/
+example/.dart_tool/
+
+# Exclude iOS Pods
+example/ios/Pods/
+example/ios/.symlinks/
+
+# Exclude other example-specific files
+example/.flutter-plugins
+example/.flutter-plugins-dependencies
+example/.metadata
+

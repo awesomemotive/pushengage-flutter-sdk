@@ -1,6 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="PushEngage"
         android:name="${applicationName}"
@@ -35,7 +36,22 @@
                     android:pathPrefix="/trigger"
                     android:scheme="app" />
             </intent-filter>
+            <!-- Additional intent filter for more flexible deeplink handling -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="app" />
+            </intent-filter>
         </activity>
+        
+        <!-- PushEngage Notification Handler Activity -->
+        <activity
+            android:name="com.pushengage.pushengage.notificationhandling.PENotificationHandlerActivity"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+            android:exported="false"
+            android:launchMode="singleTask" />
+            
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
