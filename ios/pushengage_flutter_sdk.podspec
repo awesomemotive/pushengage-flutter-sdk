@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'pushengage_flutter_sdk'
-  s.version          = '0.0.1'
+  s.version          = '1.0.0'
   s.summary          = 'PushEngage Flutter SDK'
   s.description      = 'Provide the feature for Apple push notification.'
   s.homepage         = 'http://www.pushengage.com'
@@ -13,8 +13,9 @@ Pod::Spec.new do |s|
   s.source           = { :path => '.' }
   s.source_files = 'Classes/**/*'
   s.dependency 'Flutter'
-  s.dependency 'PushEngage', '0.0.6'
-  s.platform = :ios, '9.0'
+  s.dependency 'PushEngage', '1.0.0'
+  # Must be >= the PushEngage pod's deployment target (12.0).
+  s.platform = :ios, '12.0'
 
   # Flutter.framework does not contain a i386 slice.
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }

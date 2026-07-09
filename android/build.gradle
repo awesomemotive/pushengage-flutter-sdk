@@ -9,7 +9,7 @@ buildscript {
     }
 
     dependencies {
-        classpath("com.android.tools.build:gradle:8.1.4")
+        classpath("com.android.tools.build:gradle:8.3.0")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version")
     }
 }
@@ -18,6 +18,10 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        // The PushEngage Android SDK is distributed via JitPack; declaring it
+        // here lets consumer builds resolve the dependency without having to
+        // add the repository themselves (classic project-repos mode).
+        maven { url 'https://jitpack.io' }
     }
 }
 
@@ -50,7 +54,7 @@ android {
     }
 
     dependencies {
-        implementation 'com.github.awesomemotive:pushengage-android-sdk:0.0.6'
+        implementation 'com.github.awesomemotive:pushengage-android-sdk:0.1.0'
         testImplementation("org.jetbrains.kotlin:kotlin-test")
     }
 

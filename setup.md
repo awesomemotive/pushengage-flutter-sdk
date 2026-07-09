@@ -4,10 +4,16 @@
 2. Add the SDK to `pubspec.yaml`:
    ```yaml
    dependencies:
-     pushengage_flutter_sdk: ^0.0.1
+     pushengage_flutter_sdk: ^1.0.0
 3. Run:
    ```bash
    flutter pub get
+4. **Android only** — the PushEngage Android SDK is distributed via
+   [JitPack](https://jitpack.io). If your project restricts dependency
+   repositories (e.g. `dependencyResolutionManagement` in `settings.gradle`
+   with `FAIL_ON_PROJECT_REPOS`), add JitPack there:
+   ```groovy
+   maven { url 'https://jitpack.io' }
 
 ## Demo project
 

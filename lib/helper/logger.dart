@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 class DebugLogger {
   static bool _isLoggingEnabled = false;
 
@@ -14,7 +16,7 @@ class DebugLogger {
   // Log message if logging is enabled
   static void log(String message) {
     if (_isLoggingEnabled) {
-      print(message);
+      debugPrint(message);
     }
   }
 }
