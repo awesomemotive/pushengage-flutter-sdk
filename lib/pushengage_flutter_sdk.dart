@@ -8,41 +8,137 @@ import 'package:pushengage_flutter_sdk/model/dynamic_segment.dart';
 import 'package:pushengage_flutter_sdk/model/goal.dart';
 import 'package:pushengage_flutter_sdk/model/trigger_alert.dart';
 import 'package:pushengage_flutter_sdk/model/trigger_campaign.dart';
+import 'package:pushengage_flutter_sdk/model/fcm_config_error.dart';
+import 'package:pushengage_flutter_sdk/model/environment.dart';
+import 'package:pushengage_flutter_sdk/model/identify_fields.dart';
+import 'package:pushengage_flutter_sdk/model/track_event_payload.dart';
 import 'package:pushengage_flutter_sdk/helper/pushengage_result.dart';
+
+// Public API surface — a single `import 'package:pushengage_flutter_sdk/
+// pushengage_flutter_sdk.dart';` gives consumers every model and result type.
+export 'package:pushengage_flutter_sdk/helper/pushengage_result.dart';
+export 'package:pushengage_flutter_sdk/model/dynamic_segment.dart';
+export 'package:pushengage_flutter_sdk/model/environment.dart';
+export 'package:pushengage_flutter_sdk/model/fcm_config_error.dart';
+export 'package:pushengage_flutter_sdk/model/goal.dart';
+export 'package:pushengage_flutter_sdk/model/identify_fields.dart';
+export 'package:pushengage_flutter_sdk/model/track_event_payload.dart';
+export 'package:pushengage_flutter_sdk/model/trigger_alert.dart';
+export 'package:pushengage_flutter_sdk/model/trigger_campaign.dart';
 
 class PushEngage {
   static const MethodChannel _channel = MethodChannel('PushEngage');
-  static Stream<Map<String, dynamic>>? _deepLinkStream;
-  static const _sdkVersion = "0.0.2";
+  static StreamController<Map<String, dynamic>>? _deepLinkController;
+  static StreamController<FcmConfigError>? _fcmErrorController;
+  static bool _listenersAttached = false;
+  static const _sdkVersion = "1.0.0";
 
-  /// A static getter that returns a stream of deep link data.
+  /// A stream of deep link data emitted when a notification is tapped while
+  /// the app is running. Lazily initialized as a broadcast stream so multiple
+  /// listeners are supported.
   ///
-  /// This stream emits a map containing deep link data whenever a deep link is
-  /// received. The stream is lazily initialized and uses a broadcast stream
-  /// controller to allow multiple listeners.
-  ///
-  /// The stream listens for method calls from the platform channel and emits
-  /// the deep link data when the 'onDeepLink' method is called along with additional data.
-  ///
-  /// Returns:
-  ///   A [Stream] of [Map] containing deep link data.
+  /// Cold-boot taps (notification taps that launch the app from a force-quit
+  /// state on iOS) are NOT delivered here — use [getInitialNotification] for
+  /// those.
   static Stream<Map<String, dynamic>?> get deepLinkStream {
-    if (_deepLinkStream == null) {
-      final StreamController<Map<String, dynamic>> controller =
-          StreamController<Map<String, dynamic>>.broadcast();
+    _ensureListeners();
+    return _deepLinkController!.stream;
+  }
 
-      _channel.setMethodCallHandler((call) async {
-        if (call.method == 'onDeepLink') {
-          final Map<String, dynamic> arguments =
-              Map<String, dynamic>.from(call.arguments);
-          DebugLogger.log("Data from deeplink: $arguments");
-          controller.add(arguments);
+  /// A stream of FCM configuration errors (Android only).
+  ///
+  /// Emits a [FcmConfigError] when the device's Firebase configuration does
+  /// not match the PushEngage dashboard (sender id / project id mismatch) or
+  /// the local config is invalid. Never emits on iOS.
+  static Stream<FcmConfigError> get onFcmConfigError {
+    _ensureListeners();
+    return _fcmErrorController!.stream;
+  }
+
+  /// Installs the single native→Dart method-call handler (once) and signals
+  /// native that Dart is ready. On iOS this drains the cold-boot replay queue
+  /// and routes runtime taps through `onDeepLink`; on Android it is a no-op.
+  static void _ensureListeners() {
+    // Create both controllers eagerly so that once the native->Dart handler is
+    // installed it never has a null controller to drop an event into,
+    // regardless of which stream the consumer subscribed to first.
+    _deepLinkController ??= StreamController<Map<String, dynamic>>.broadcast();
+    _fcmErrorController ??= StreamController<FcmConfigError>.broadcast();
+    if (_listenersAttached) return;
+    _listenersAttached = true;
+    _channel.setMethodCallHandler(_handleNativeCall);
+    // Fire-and-forget; swallow errors so a missing platform implementation
+    // can't surface as an unhandled async error, and release the latch so a
+    // later access retries.
+    unawaited(
+      _channel
+          .invokeMethod('PushEngage#attachListeners')
+          .catchError((Object e) {
+        _listenersAttached = false;
+        DebugLogger.log('Failed to attach native listeners: $e');
+      }),
+    );
+  }
+
+  static Future<dynamic> _handleNativeCall(MethodCall call) async {
+    switch (call.method) {
+      case 'onDeepLink':
+        final arguments = Map<String, dynamic>.from(call.arguments as Map);
+        // `data` may arrive as a JSON string; decode it so consumers always
+        // see a Map.
+        final data = arguments['data'];
+        if (data is String) {
+          try {
+            arguments['data'] = jsonDecode(data);
+          } on FormatException {
+            // Not JSON — leave as-is.
+          }
         }
-      });
-
-      _deepLinkStream = controller.stream;
+        DebugLogger.log("Data from deeplink: $arguments");
+        _deepLinkController?.add(arguments);
+        break;
+      case 'onFcmConfigError':
+        final map = Map<String, dynamic>.from(call.arguments as Map);
+        _fcmErrorController?.add(FcmConfigError(
+          code: map['code'] as int,
+          message: map['message'] as String,
+        ));
+        break;
     }
-    return _deepLinkStream!;
+    return null;
+  }
+
+  /// Returns the notification that cold-launched the app (iOS), exactly once.
+  ///
+  /// On a cold-boot tap, iOS fires the open handler before Dart can subscribe
+  /// to [deepLinkStream], so that tap is delivered here instead. Call this
+  /// once on startup (in addition to listening on [deepLinkStream]). Resolves
+  /// `null` on Android and on every call after the first (idempotent drain).
+  static Future<PushEngageResult<Map<String, dynamic>?>>
+      getInitialNotification() async {
+    try {
+      final res = await _channel
+          .invokeMethod<dynamic>('PushEngage#getInitialNotification');
+      if (res == null) return PushEngageResult.success(null);
+      return PushEngageResult.success(Map<String, dynamic>.from(res as Map));
+    } catch (e) {
+      return PushEngageResult.failure(e);
+    }
+  }
+
+  /// Switches the SDK between staging and production backends.
+  ///
+  /// Must be called BEFORE [setAppId] — the native Android SDK caches its base
+  /// URLs when the app id is set.
+  ///
+  /// [environment] The [Environment] to use.
+  static Future<void> setEnvironment(Environment environment) async {
+    try {
+      await _channel.invokeMethod(
+          'PushEngage#setEnvironment', {'environment': environment.wireValue});
+    } catch (e) {
+      DebugLogger.log('Failed to set environment: $e');
+    }
   }
 
   /// Sets the application ID for PushEngage.
@@ -52,7 +148,9 @@ class PushEngage {
   /// [appId] The application ID to be set.
   static Future<void> setAppId(String appId) async {
     try {
-      await _channel.invokeMethod('PushEngage#setAppId', {'appId': appId});
+      // Forward the SDK version for native attribution.
+      await _channel.invokeMethod(
+          'PushEngage#setAppId', {'appId': appId, 'sdkVersion': _sdkVersion});
       DebugLogger.log('App Id set successfully');
     } on PlatformException catch (e) {
       DebugLogger.log('Failed to set AppId: ${e.message}');
@@ -67,6 +165,23 @@ class PushEngage {
   ///   A [String] representing the SDK version.
   static String getSdkVersion() {
     return _sdkVersion;
+  }
+
+  /// Sets the app icon badge count. Pass `0` to clear it.
+  ///
+  /// On iOS, uses the system badge (iOS 16+ API with a fallback). On Android,
+  /// the stored count is applied to subsequently displayed notifications
+  /// (`setNumber`), negative values are clamped to `0`, and `0` also cancels
+  /// all of the app's active notifications. Values outside the 32-bit integer
+  /// range are treated as `0` (cleared).
+  static Future<void> setBadgeCount(int count) async {
+    final coerced = (count < -2147483648 || count > 2147483647) ? 0 : count;
+    try {
+      await _channel
+          .invokeMethod('PushEngage#setBadgeCount', {'count': coerced});
+    } catch (e) {
+      DebugLogger.log('Failed to set badge count: $e');
+    }
   }
 
   /// Android only
@@ -230,6 +345,8 @@ class PushEngage {
   static Future<PushEngageResult<Map<String, dynamic>?>> getSubscriberDetails(
       List<String>? values) async {
     try {
+      // Native returns a JSON string of the record, or an error if the user
+      // is not subscribed.
       final String response = await _channel
           .invokeMethod('PushEngage#getSubscriberDetails', {'values': values});
       final Map<String, dynamic> decodedData =
@@ -250,17 +367,9 @@ class PushEngage {
   /// and returns a [PushEngageResult] with a value of `false`.
   static Future<PushEngageResult<bool>> requestNotificationPermission() async {
     try {
-      if (Platform.isAndroid) {
-        final bool? isGranted = await _channel
-            .invokeMethod<bool>('PushEngage#requestNotificationPermission');
-        return isGranted == true
-            ? PushEngageResult.success(true)
-            : PushEngageResult.success(false);
-      } else {
-        final _ = await _channel
-            .invokeMethod('PushEngage#requestNotificationPermission');
-        return PushEngageResult.success(true);
-      }
+      final bool? isGranted = await _channel
+          .invokeMethod<bool>('PushEngage#requestNotificationPermission');
+      return PushEngageResult.success(isGranted == true);
     } catch (e) {
       return PushEngageResult.success(false);
     }
@@ -272,6 +381,8 @@ class PushEngage {
   /// notification permission state:
   /// - "granted": The application is authorized to post user notifications
   /// - "denied": The application is not authorized to post user notifications
+  /// - "notYetRequested": iOS only — permission has not been requested yet
+  ///   (Android reports only "granted"/"denied")
   ///
   /// This method works synchronously and returns the current system-level
   /// notification permission status.
@@ -587,6 +698,67 @@ class PushEngage {
       final String result = await _channel.invokeMethod(
           'PushEngage#setSubscriberAttributes',
           {'attributes': attributesJsonString});
+      return PushEngageResult.success(result);
+    } catch (e) {
+      return PushEngageResult.failure(e);
+    }
+  }
+
+  /// Identifies the subscriber with the predefined [IdentifyFields].
+  ///
+  /// Only the fields that were set are sent. Calls with identical fields
+  /// short-circuit locally in the native SDK (24h TTL on iOS).
+  static Future<PushEngageResult<String?>> identify(
+      IdentifyFields fields) async {
+    try {
+      final result = await _channel.invokeMethod<String>(
+          'PushEngage#identify', {'fields': jsonEncode(fields.toMap())});
+      return PushEngageResult.success(result);
+    } catch (e) {
+      return PushEngageResult.failure(e);
+    }
+  }
+
+  /// Removes subscriber identification fields.
+  ///
+  /// Pass `null` or an empty list to clear the default PII set (first_name,
+  /// last_name, email, phone, gender, dob, profile_id).
+  static Future<PushEngageResult<String?>> logout(
+      List<String>? fieldNames) async {
+    try {
+      final result = await _channel.invokeMethod<String>(
+          'PushEngage#logout', {'fieldNames': fieldNames});
+      return PushEngageResult.success(result);
+    } catch (e) {
+      return PushEngageResult.failure(e);
+    }
+  }
+
+  /// Validates the device's Firebase configuration against the PushEngage
+  /// dashboard (Android only). Resolves `true` if the configuration matches.
+  /// Always resolves `true` on iOS (no FCM surface).
+  static Future<PushEngageResult<bool>> runConfigValidation(
+      String senderId, String projectId) async {
+    try {
+      final ok = await _channel.invokeMethod<bool>(
+              'PushEngage#runConfigValidation',
+              {'senderId': senderId, 'projectId': projectId}) ??
+          false;
+      return PushEngageResult.success(ok);
+    } catch (e) {
+      return PushEngageResult.failure(e);
+    }
+  }
+
+  /// Tracks a custom analytics event.
+  ///
+  /// [event] must carry a non-empty `eventName`; unset optional fields are not
+  /// sent and the native SDK applies its defaults for `provider`/`eventType`.
+  static Future<PushEngageResult<String?>> trackEvent(
+      TrackEventPayload event) async {
+    try {
+      final result = await _channel.invokeMethod<String>(
+          'PushEngage#trackEvent', event.toMap());
       return PushEngageResult.success(result);
     } catch (e) {
       return PushEngageResult.failure(e);

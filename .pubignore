@@ -1,19 +1,50 @@
-# Exclude example app configuration files from published package
+# Files excluded from the published package.
+# Note: when a .pubignore exists, `flutter pub publish` uses it instead of
+# .gitignore, so anything that must stay out of the package is listed here.
+
+# Project tooling / docs
+docs/
+automation/
+deploy.sh
+CLAUDE.md
+.claude/
+
+# Build artifacts, caches, IDE + OS metadata
+build/
+.dart_tool/
+.DS_Store
+**/.DS_Store
+*.iml
+.idea/
+.vscode/
+
+# Credentials / project config (never publish)
+**/google-services.json
+**/GoogleService-Info.plist
+
+# Example app configuration
 example/android/app/google-services.json
 example/android/local.properties
 
-# Exclude example app build artifacts
+# Example app build artifacts
 example/build/
 example/android/build/
 example/ios/build/
 example/.dart_tool/
 
-# Exclude iOS Pods
+# Example iOS Pods + Flutter ephemeral tooling
 example/ios/Pods/
 example/ios/.symlinks/
+example/ios/Flutter/ephemeral/
+example/ios/Flutter/Flutter.podspec
 
-# Exclude other example-specific files
+# Android Gradle caches (plugin + example)
+.gradle/
+
+# Per-user Xcode state
+**/xcuserdata/
+
+# Other example-specific files
 example/.flutter-plugins
 example/.flutter-plugins-dependencies
 example/.metadata
-

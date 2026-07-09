@@ -6,6 +6,7 @@ class DynamicSegment implements Mappable {
 
   DynamicSegment({required this.name, required this.duration});
 
+  @override
   Map<String, dynamic> toMap() => {
         'name': name,
         'duration': duration,

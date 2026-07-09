@@ -1,6 +1,10 @@
 # Define minimum iOS platform version
 platform :ios, '13.0'
 
+# Released PushEngage iOS SDK 1.0.0. In 1.0.0 the SDK is split into the app pod
+# `PushEngage` (which depends on `PushEngageExtension`) and the extension-safe
+# `PushEngageExtension`. Both are published on CocoaPods trunk.
+
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
@@ -31,35 +35,33 @@ target 'Runner' do
   use_frameworks!
   use_modular_headers!
 
+  # Released PushEngage 1.0.0 from CocoaPods trunk, matching the version the
+  # plugin's podspec declares. PushEngageExtension is pulled in transitively as
+  # PushEngage's dependency.
+  pod 'PushEngage', '1.0.0'
+
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 #  target 'RunnerTests' do
 #    inherit! :search_paths
 #  end
 end
 
+# No build-setting overrides needed with PushEngage SDK 1.0.0: the extension
+# targets link only the extension-safe `PushEngageExtension` pod, so the
+# default APPLICATION_EXTENSION_API_ONLY handling works, and the SDK podspecs
+# carry no arch exclusions or deployment-target quirks.
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
-    target.build_configurations.each do |config|
-      config.build_settings['APPLICATION_EXTENSION_API_ONLY'] = 'No'
-      # Allow arm64 on iOS Simulator to avoid "unsupported Swift architecture" when precompiling Swift modules
-      config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = ''
-      # Fix deployment target to avoid warnings
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '12.0'
-      # Disable module cache to avoid corruption issues
-      config.build_settings['CLANG_MODULE_CACHE_PATH'] = ''
-      # Disable SDK stat cache to avoid missing file errors
-      config.build_settings['CLANG_STAT_CACHE'] = 'NO'
-     end
   end
 end
 
 target 'NotificationServiceExtension' do
   use_frameworks!
-  pod 'PushEngage', '0.0.6'
+  pod 'PushEngageExtension', '1.0.0'
 end
 
 target 'NotificationContentExtension' do
   use_frameworks!
-  pod 'PushEngage', '0.0.6'
+  pod 'PushEngageExtension', '1.0.0'
 end

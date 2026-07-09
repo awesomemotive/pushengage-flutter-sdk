@@ -7,6 +7,8 @@ public class PushEngageFlutterSdkPlugin: NSObject,
     FlutterApplicationLifeCycleDelegate, UNUserNotificationCenterDelegate
 {
     static var channel: FlutterMethodChannel?
+    // Cold-boot replay buffer — see MessageBuffer.swift.
+    let buffer = MessageBuffer()
     public static func register(with registrar: FlutterPluginRegistrar) {
         self.channel = FlutterMethodChannel(
             name: "PushEngage", binaryMessenger: registrar.messenger())
@@ -24,14 +26,19 @@ public class PushEngageFlutterSdkPlugin: NSObject,
 
         PushEngage.setInitialInfo(for: application, with: [:])
 
-        PushEngage.setNotificationOpenHandler { (result) in
+        // Tag the subscriber as a Flutter client. The version is set in setAppId.
+        PushEngage.setPlatform(PEPlatform.flutterIOS)
+
+        PushEngage.setNotificationOpenHandler { [weak self] (result) in
             let additionalData: [String: String]? = result.notification.additionalData
             //Deeplink - trigger
             let deeplink = result.notificationAction.actionID
             let arguments: [String: Any] = [
                 "deepLink": deeplink as Any, "data": additionalData as Any,
             ]
-            PushEngageFlutterSdkPlugin.channel?.invokeMethod("onDeepLink", arguments: arguments)
+            // Route through the buffer: cold-boot taps land in the initial slot
+            // (drained by getInitialNotification); runtime taps fire onDeepLink.
+            self?.buffer.deliver(arguments)
         }
 
         return true
@@ -46,12 +53,28 @@ public class PushEngageFlutterSdkPlugin: NSObject,
         return true
     }
 
-    public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    public func handle(_ call: FlutterMethodCall, result rawResult: @escaping FlutterResult) {
+        // Most PushEngage iOS SDK completion handlers fire on the SDK's own
+        // network queue. Calling FlutterResult off the main thread is
+        // undefined per Flutter's contract. Wrap once here so every reply
+        // path is automatically marshaled.
+        let result: FlutterResult = { value in
+            if Thread.isMainThread {
+                rawResult(value)
+            } else {
+                DispatchQueue.main.async { rawResult(value) }
+            }
+        }
         switch call.method {
         case "PushEngage#setAppId":
             if let args = call.arguments as? [String: Any],
                 let appId = args["appId"] as? String
             {
+                // Set the version before setAppID so first-launch telemetry
+                // is tagged correctly.
+                if let sdkVersion = args["sdkVersion"] as? String {
+                    PushEngage.setWrapperVersion(sdkVersion)
+                }
                 PushEngage.setAppID(id: appId)
                 result(nil)
             } else {
@@ -60,6 +83,19 @@ public class PushEngageFlutterSdkPlugin: NSObject,
                         code: "INVALID_ARGUMENT", message: "Missing required arguments",
                         details: nil))
             }
+
+        case "PushEngage#setEnvironment":
+            let env = (call.arguments as? [String: Any])?["environment"] as? String
+            let pe: PEEnvironment =
+                (env?.uppercased() == "STAGING" || env?.uppercased() == "STG")
+                ? .staging : .production
+            PushEngage.setEnvironment(environment: pe)
+            result(nil)
+
+        case "PushEngage#setBadgeCount":
+            let count = (call.arguments as? [String: Any])?["count"] as? Int ?? 0
+            PushEngage.setBadgeCount(count: count)
+            result(nil)
 
         case "PushEngage#getDeviceTokenHash":
             result(nil)
@@ -98,7 +134,10 @@ public class PushEngageFlutterSdkPlugin: NSObject,
                     } else {
                         result(
                             FlutterError(
-                                code: "FAILURE", message: "Trigger enabled failed", details: nil))
+                                code: "FAILURE",
+                                message: "Automated notification "
+                                    + (status ? "enable" : "disable") + " failed",
+                                details: nil))
                     }
                 }
             } else {
@@ -135,15 +174,15 @@ public class PushEngageFlutterSdkPlugin: NSObject,
                         details: nil))
             }
         case "PushEngage#getSubscriberDetails":
-            guard let args = call.arguments as? [String: Any],
-                let values = args["values"] as? [String]
-            else {
+            guard let args = call.arguments as? [String: Any] else {
                 result(
                     FlutterError(
                         code: "INVALID_ARGUMENT", message: "Missing required arguments",
                         details: nil))
                 return
             }
+            // A null/missing list requests the complete record.
+            let values = args["values"] as? [String]
             self.getSubscriberDetails(values: values, result: result)
         case "PushEngage#requestNotificationPermission":
             requestNotificationPermission(result: result)
@@ -194,6 +233,10 @@ public class PushEngageFlutterSdkPlugin: NSObject,
             PushEngage.getSubscriberAttributes { info, error in
                 if let info {
                     result(info)
+                } else if error == nil {
+                    // No attributes on the subscriber — mirror Android's
+                    // empty-map success instead of failing.
+                    result([String: Any]())
                 } else {
                     result(
                         FlutterError(
@@ -346,6 +389,105 @@ public class PushEngageFlutterSdkPlugin: NSObject,
                             details: error?.localizedDescription))
                 }
             }
+        case "PushEngage#identify":
+            guard let json = (call.arguments as? [String: Any])?["fields"] as? String,
+                let fields = jsonStringToDictionary(json)
+            else {
+                result(
+                    FlutterError(
+                        code: "INVALID_ARGUMENT", message: "Missing fields", details: nil))
+                return
+            }
+            PushEngage.identify(fields: fields) { success, error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        result(
+                            FlutterError(
+                                code: "IDENTIFY_ERROR", message: error.localizedDescription,
+                                details: nil))
+                    } else if success {
+                        result("Identify successful")
+                    } else {
+                        result(
+                            FlutterError(
+                                code: "IDENTIFY_FAILED", message: "Identify failed",
+                                details: nil))
+                    }
+                }
+            }
+
+        case "PushEngage#trackEvent":
+            guard let event = call.arguments as? [String: Any],
+                let eventName = event["eventName"] as? String, !eventName.isEmpty
+            else {
+                result(
+                    FlutterError(
+                        code: "MISSING_ARGUMENTS", message: "Missing required eventName",
+                        details: nil))
+                return
+            }
+            let properties = event["data"] as? [String: Any]
+            let profileId = event["profileId"] as? String
+            let provider = event["provider"] as? String
+            let eventType = event["eventType"] as? String
+            PushEngage.trackEvent(
+                name: eventName, properties: properties, profileId: profileId,
+                provider: provider, eventType: eventType
+            ) { success, error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        result(
+                            FlutterError(
+                                code: "TRACK_EVENT_ERROR", message: error.localizedDescription,
+                                details: nil))
+                    } else if success {
+                        result("Track event successful")
+                    } else {
+                        result(
+                            FlutterError(
+                                code: "TRACK_EVENT_FAILED", message: "Track event failed",
+                                details: nil))
+                    }
+                }
+            }
+
+        case "PushEngage#logout":
+            let names = (call.arguments as? [String: Any])?["fieldNames"] as? [String]
+            PushEngage.logout(fieldNames: names) { success, error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        result(
+                            FlutterError(
+                                code: "LOGOUT_ERROR", message: error.localizedDescription,
+                                details: nil))
+                    } else if success {
+                        result("Logout successful")
+                    } else {
+                        result(
+                            FlutterError(
+                                code: "LOGOUT_FAILED", message: "Logout failed", details: nil))
+                    }
+                }
+            }
+
+        case "PushEngage#runConfigValidation":
+            // iOS has no FCM config surface; resolve true so shared Dart code
+            // can call this without a platform guard.
+            result(true)
+
+        case "PushEngage#getInitialNotification":
+            result(buffer.consumeInitialNotification())
+        case "PushEngage#attachListeners":
+            // Dart is ready: route runtime taps through onDeepLink and flush
+            // any queued pre-readiness deliveries. The cold-boot slot is left
+            // untouched (drained separately via getInitialNotification).
+            buffer.setCallback { args in
+                DispatchQueue.main.async {
+                    PushEngageFlutterSdkPlugin.channel?.invokeMethod(
+                        "onDeepLink", arguments: args)
+                }
+            }
+            result(nil)
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -360,20 +502,25 @@ public class PushEngageFlutterSdkPlugin: NSObject,
                     return json
                 }
             } catch {
-                print("Error converting JSON string to dictionary: \(error.localizedDescription)")
+                if PushEngage.enableLogging {
+                    print(
+                        "Error converting JSON string to dictionary: \(error.localizedDescription)")
+                }
             }
         }
         return nil
     }
 
-    private func getSubscriberDetails(values: [String], result: @escaping FlutterResult) {
+    private func getSubscriberDetails(values: [String]?, result: @escaping FlutterResult) {
+        // A nil response means the user is not subscribed; surface as a failure.
         PushEngage.getSubscriberDetails(for: values) { response, error in
             if let value = response {
-
-                let encoder = JSONEncoder()
-                encoder.keyEncodingStrategy = .convertToSnakeCase
+                // PushEngage iOS SDK 1.0.0: SubscriberDetailsData exposes the
+                // server fields via `rawFields` ([String: Any], snake_case keys)
+                // and is no longer Encodable — serialize the dictionary directly.
                 do {
-                    let jsonData = try encoder.encode(value)
+                    let jsonData = try JSONSerialization.data(
+                        withJSONObject: value.rawFields, options: [])
                     result(String(data: jsonData, encoding: .utf8))
                 } catch {
                     result(
@@ -448,13 +595,20 @@ public class PushEngageFlutterSdkPlugin: NSObject,
         guard let typeString = args["type"] as? String,
             let productId = args["productId"] as? String,
             let link = args["link"] as? String,
-            let price = args["price"] as? Double
+            let price = (args["price"] as? Double) ?? (args["price"] as? Int).map(Double.init)
         else {
+            result(
+                FlutterError(
+                    code: "INVALID_ARGUMENT",
+                    message: "Missing or invalid required arguments for addAlert",
+                    details: nil))
             return
         }
         var expiryTimestampDate: Date?
         if let expiryTimestamp = args["expiryTimestamp"] as? String {
-            expiryTimestampDate = ISO8601DateFormatter().date(from: expiryTimestamp)
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            expiryTimestampDate = formatter.date(from: expiryTimestamp)
         }
         var availability: TriggerAlertAvailabilityType?
         if let availabilityString = args["availability"] as? String {

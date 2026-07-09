@@ -1,30 +1,42 @@
 PODS:
   - Flutter (1.0.0)
-  - PushEngage (0.0.6)
-  - pushengage_flutter_sdk (0.0.1):
+  - PushEngage (1.0.0):
+    - PushEngageExtension (= 1.0.0)
+  - pushengage_flutter_sdk (1.0.0):
     - Flutter
-    - PushEngage (= 0.0.6)
+    - PushEngage (= 1.0.0)
+  - PushEngageExtension (1.0.0)
+  - shared_preferences_foundation (0.0.1):
+    - Flutter
+    - FlutterMacOS
 
 DEPENDENCIES:
   - Flutter (from `Flutter`)
-  - PushEngage (= 0.0.6)
+  - PushEngage (= 1.0.0)
   - pushengage_flutter_sdk (from `.symlinks/plugins/pushengage_flutter_sdk/ios`)
+  - PushEngageExtension (= 1.0.0)
+  - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
 
 SPEC REPOS:
   trunk:
     - PushEngage
+    - PushEngageExtension
 
 EXTERNAL SOURCES:
   Flutter:
     :path: Flutter
   pushengage_flutter_sdk:
     :path: ".symlinks/plugins/pushengage_flutter_sdk/ios"
+  shared_preferences_foundation:
+    :path: ".symlinks/plugins/shared_preferences_foundation/darwin"
 
 SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
-  PushEngage: b14dcbaada4a1bb44dd010b016d39af72c3e5c34
-  pushengage_flutter_sdk: a0b405193d0794d8b66cc366e1e7f3f98df9ef1e
+  PushEngage: 4f7d453a251ac56f0909259a4699fd8abc11493f
+  pushengage_flutter_sdk: 23be948306d98181b2921cf8c6997294b4f7e241
+  PushEngageExtension: 181aba77761f464a52ffa4e782c634469b3e7845
+  shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
 
-PODFILE CHECKSUM: d968c772bbf8ad947c5af122e4fd89d31182539f
+PODFILE CHECKSUM: 0fff595c6c485b99b2e239243fdbf8233797b74d
 
 COCOAPODS: 1.16.2

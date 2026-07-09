@@ -6,13 +6,13 @@
 //
 
 import SwiftUI
-import PushEngage
+import PushEngageExtension
 
 @available(iOSApplicationExtension 13.0, *)
 struct ContentView: View {
-    
+
     var payLoadInfo: CustomUIModel
-    
+
     var body: some View {
         VStack(alignment: .center,spacing: 10) {
             HStack(alignment: .center) {
@@ -38,6 +38,5 @@ struct ContentView: View {
                 .padding(.all, 10)
         }.background(Color.white)
     }
-    
-}
 
+}

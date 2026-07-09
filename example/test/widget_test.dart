@@ -1,27 +1,30 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:pushengage_flutter_sdk_example/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('Verify Platform version', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  TestWidgetsFlutterBinding.ensureInitialized();
+  const channel = MethodChannel('PushEngage');
+  final messenger =
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
-    // Verify that platform version is retrieved.
-    expect(
-      find.byWidgetPredicate(
-        (Widget widget) =>
-            widget is Text && widget.data!.startsWith('Running on:'),
-      ),
-      findsOneWidget,
-    );
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    // Stub every native call (getInitialNotification -> null, setters -> null).
+    messenger.setMockMethodCallHandler(channel, (call) async => null);
+  });
+
+  tearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+  testWidgets('boots through AppBootstrap to the PushEngage home screen',
+      (tester) async {
+    await tester.pumpWidget(const DemoApp());
+    await tester.pumpAndSettle();
+
+    // The home app bar title + first section header are shown once bootstrap
+    // completes (later sections are below the fold in the lazy ListView).
+    expect(find.text('PushEngage'), findsWidgets);
+    expect(find.text('SUBSCRIPTION'), findsOneWidget);
   });
 }

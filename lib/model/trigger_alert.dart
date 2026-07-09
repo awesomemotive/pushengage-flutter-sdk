@@ -25,6 +25,17 @@ class TriggerAlert {
     this.data,
   });
 
+  // Android's SimpleDateFormat("...HH:mm:ss.SSSXXX") accepts exactly 3
+  // fractional digits; Dart's toIso8601String emits 6 when microseconds are
+  // non-zero. Truncate to millisecond precision before formatting.
+  static String? _formatExpiryTimestamp(DateTime? ts) {
+    if (ts == null) return null;
+    final utc = ts.toUtc();
+    return DateTime.utc(utc.year, utc.month, utc.day, utc.hour, utc.minute,
+            utc.second, utc.millisecond)
+        .toIso8601String();
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'type': type.name,
@@ -32,7 +43,7 @@ class TriggerAlert {
       'link': link,
       'price': price,
       'variantId': variantId,
-      'expiryTimestamp': expiryTimestamp?.toIso8601String(),
+      'expiryTimestamp': _formatExpiryTimestamp(expiryTimestamp),
       'alertPrice': alertPrice,
       'availability': availability?.name,
       'profileId': profileId,

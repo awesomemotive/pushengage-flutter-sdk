@@ -43,7 +43,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  pushengage_flutter_sdk: ^0.0.2
+  pushengage_flutter_sdk: ^1.0.0
 ```
 
 Then run:
@@ -106,15 +106,16 @@ await PushEngage.sendGoal(goal);
 
 | Category | Methods |
 |----------|---------|
-| **Setup** | `setAppId`, `getSdkVersion`, `setSmallIconResource` (Android), `enableLogging` |
+| **Setup** | `setAppId`, `getSdkVersion`, `setSmallIconResource` (Android), `setBadgeCount`, `runConfigValidation` (Android), `enableLogging` |
 | **Permissions** | `requestNotificationPermission`, `getNotificationPermissionStatus` |
 | **Subscription** | `subscribe`, `unsubscribe`, `getSubscriptionStatus`, `getSubscriptionNotificationStatus` |
-| **Subscriber Data** | `getSubscriberId`, `getSubscriberDetails`, `getDeviceTokenHash` (Android), `addProfileId` |
+| **Subscriber Data** | `getSubscriberId`, `getSubscriberDetails`, `getDeviceTokenHash` (Android), `addProfileId`, `identify`, `logout` |
 | **Attributes** | `addSubscriberAttributes`, `setSubscriberAttributes`, `getSubscriberAttributes`, `deleteSubscriberAttributes` |
 | **Segments** | `addSegment`, `removeSegment`, `addDynamicSegment` |
-| **Events** | `sendTriggerEvent`, `sendGoal`, `addAlert` |
+| **Events** | `sendTriggerEvent`, `sendGoal`, `addAlert`, `trackEvent` |
+| **Notifications** | `getInitialNotification` (iOS) |
 | **Campaigns** | `automatedNotification` (enable/disable) |
-| **Streams** | `deepLinkStream` (deep link data) |
+| **Streams** | `deepLinkStream` (deep link data), `onFcmConfigError` (Android FCM config errors) |
 
 All async methods return `PushEngageResult<T>` which wraps the response data and any errors for safe handling.
 
@@ -156,7 +157,7 @@ flutter run
 |-------------|---------|
 | Flutter | 3.3.0+ |
 | Dart | 3.4.3+ |
-| iOS | 9.0+ |
+| iOS | 12.0+ |
 | Android | 5.0+ (API 21) |
 | Firebase | Required (Android) |
 | APNs | Required (iOS) |

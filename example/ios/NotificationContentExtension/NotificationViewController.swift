@@ -8,22 +8,22 @@
 import UIKit
 import UserNotifications
 import UserNotificationsUI
-import PushEngage
+import PushEngageExtension
 import SwiftUI
 
 class NotificationViewController: UIViewController, UNNotificationContentExtension {
-    
+
     fileprivate var hostingView: UIHostingController<ContentView>?
-    
+
     override func viewDidLoad() {
         super.viewDidLoad()
         self.view.backgroundColor = .white
     }
-    
+
     func didReceive(_ notification: UNNotification) {
         print(notification.request.content.categoryIdentifier)
         if(notification.request.content.categoryIdentifier == "customNotification"){
-            let payLoad = PushEngage.getCustomUIPayLoad(for: notification.request)
+            let payLoad = PushEngageExtension.getCustomUIPayLoad(for: notification.request)
             let view = ContentView(payLoadInfo: payLoad)
             hostingView = UIHostingController(rootView: view)
             addChild(hostingView!)
@@ -37,5 +37,5 @@ class NotificationViewController: UIViewController, UNNotificationContentExtensi
                                          hostingView!.view.centerXAnchor.constraint(equalTo: self.view.centerXAnchor)])
         }
     }
-    
+
 }
