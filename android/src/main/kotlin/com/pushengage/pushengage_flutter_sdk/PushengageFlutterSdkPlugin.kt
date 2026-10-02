@@ -13,6 +13,7 @@ import com.pushengage.pushengage.Callbacks.PushEngageResponseCallback
 import com.pushengage.pushengage.PushEngage
 import com.pushengage.pushengage.helper.PEConstants
 import com.pushengage.pushengage.helper.PEPrefs
+import com.pushengage.pushengage.iam.action.IAMCustomActionHandler
 import com.pushengage.pushengage.model.request.AddDynamicSegmentRequest
 import com.pushengage.pushengage.model.request.Goal
 import com.pushengage.pushengage.model.request.TrackEvent
@@ -71,6 +72,30 @@ class PushEngageFlutterSdkPlugin :
         PushEngage.setFcmConfigErrorListener(
                 FcmConfigErrorListener { code, message ->
                     deliverFcmError(mapOf("code" to code, "message" to message))
+                }
+        )
+
+        // Auto-register the in-app message custom-action listener so Dart
+        // consumers can subscribe to onIAMCustomAction without an explicit
+        // activation step. No cold-boot buffering: a custom action only fires
+        // on a user tap inside a displayed message, which cannot happen before
+        // Dart attaches. Parameter values are stringified so the Dart contract
+        // stays Map<String, String> for mixed native payloads.
+        PushEngage.setIAMCustomActionHandler(
+                object : IAMCustomActionHandler {
+                    override fun onCustomAction(
+                            actionId: String,
+                            parameters: Map<String, Any>
+                    ) {
+                        emitOnMain(
+                                "onIAMCustomAction",
+                                mapOf(
+                                        "actionId" to actionId,
+                                        "parameters" to
+                                                parameters.mapValues { it.value.toString() }
+                                )
+                        )
+                    }
                 }
         )
     }
@@ -631,6 +656,40 @@ class PushEngageFlutterSdkPlugin :
                     )
                 }
             }
+            "PushEngage#triggerIAMEvent" -> {
+                val eventName =
+                        call.argument<String>("eventName")?.takeIf { it.isNotEmpty() }
+                if (eventName == null) {
+                    result.error("400", "Event name is required", null)
+                    return
+                }
+                // Drop null values so the map matches the SDK's
+                // Map<String, Object> parameter (values are stringified by the
+                // SDK before trigger matching).
+                val parameters: Map<String, Any>? =
+                        call.argument<Map<String, Any?>>("parameters")
+                                ?.entries
+                                ?.mapNotNull { (k, v) -> v?.let { k to it } }
+                                ?.toMap()
+                PushEngage.triggerIAMEvent(
+                        eventName,
+                        parameters,
+                        object : PushEngageResponseCallback {
+                            override fun onSuccess(responseObject: Any?) {
+                                result.success(
+                                        "In-app message event triggered successfully")
+                            }
+
+                            override fun onFailure(errorCode: Int?, errorMessage: String?) {
+                                result.error(
+                                        errorCode?.toString() ?: "TRIGGER_IN_APP_EVENT_ERROR",
+                                        errorMessage ?: "Failed to trigger in-app message event",
+                                        null
+                                )
+                            }
+                        }
+                )
+            }
             "PushEngage#getInitialNotification" -> {
                 // Android delivers launch notifications via the host activity's
                 // deep-link intent (handleIntent -> onDeepLink), not this method.
@@ -651,6 +710,7 @@ class PushEngageFlutterSdkPlugin :
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         PushEngage.setFcmConfigErrorListener(null)
+        PushEngage.setIAMCustomActionHandler(null)
         channel.setMethodCallHandler(null)
         synchronized(bufferLock) {
             listenersAttached = false

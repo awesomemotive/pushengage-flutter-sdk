@@ -2,14 +2,25 @@ import Flutter
 import UIKit
 import PushEngage
 
+// The app uses the UIScene life cycle (required for apps built with the
+// iOS 27 SDK): Info.plist's UIApplicationSceneManifest hands the window to
+// Flutter's FlutterSceneDelegate, which loads Main.storyboard. The
+// FlutterViewController therefore doesn't exist yet in didFinishLaunching,
+// so plugins are registered through `pluginRegistrant` when the storyboard
+// instantiates it. `pluginRegistrant` and FlutterSceneDelegate need Flutter
+// 3.35 or later.
 @main
-@objc class AppDelegate: FlutterAppDelegate {
-    
+@objc class AppDelegate: FlutterAppDelegate, FlutterPluginRegistrant {
+
     override init() {
         super.init()
         PushEngage.swizzleInjection(isEnabled: true)
     }
-    
+
+    func register(with registry: FlutterPluginRegistry) {
+        GeneratedPluginRegistrant.register(with: registry)
+    }
+
     override func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -17,7 +28,7 @@ import PushEngage
         if #available(iOSApplicationExtension 10.0, *) {
             UNUserNotificationCenter.current().delegate = self
         }
-        GeneratedPluginRegistrant.register(with: self)
+        pluginRegistrant = self
         PushEngage.setBadgeCount(count: 0)
         PushEngage.setNotificationWillShowInForegroundHandler { notification, completion in
             if notification.contentAvailable == 1 {

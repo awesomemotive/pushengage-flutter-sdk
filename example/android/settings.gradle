@@ -24,3 +24,7 @@ plugins {
 }
 
 include ":app"
+
+// PushEngage Android SDK resolves from the published JitPack artifact
+// (com.github.awesomemotive:pushengage-android-sdk, declared in the plugin's
+// android/build.gradle).

@@ -32,6 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   StreamSubscription<Map<String, dynamic>?>? _deepLinkSub;
   StreamSubscription<FcmConfigError>? _fcmSub;
+  StreamSubscription<IAMCustomAction>? _inAppActionSub;
 
   @override
   void initState() {
@@ -50,6 +51,13 @@ class _HomeScreenState extends State<HomeScreen> {
       SdkEventLog.instance.error('FCM Config Error (${e.code})', e.message);
     });
 
+    _inAppActionSub = PushEngage.onIAMCustomAction.listen((action) {
+      SdkEventLog.instance.success(
+        'In-App Custom Action: ${action.actionId}',
+        jsonEncode(action.parameters),
+      );
+    });
+
     _drainInitialNotification();
   }
 
@@ -57,6 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _deepLinkSub?.cancel();
     _fcmSub?.cancel();
+    _inAppActionSub?.cancel();
     super.dispose();
   }
 
@@ -387,6 +396,10 @@ class _HomeScreenState extends State<HomeScreen> {
         _Section('Triggers', [
           _Action('triggers', 'Trigger Campaigns',
               () => Navigator.of(context).pushNamed('/triggerCampaigns')),
+        ]),
+        _Section('In-App Messaging', [
+          _Action('inAppMessaging', 'In-App Messaging',
+              () => Navigator.of(context).pushNamed('/inAppMessaging')),
         ]),
       ];
 

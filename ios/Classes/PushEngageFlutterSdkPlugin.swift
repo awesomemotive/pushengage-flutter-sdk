@@ -7,6 +7,8 @@ public class PushEngageFlutterSdkPlugin: NSObject,
     FlutterApplicationLifeCycleDelegate, UNUserNotificationCenterDelegate
 {
     static var channel: FlutterMethodChannel?
+    // Set once the native SDK has been configured — see configureSDK(for:).
+    private static var didConfigureSDK = false
     // Cold-boot replay buffer — see MessageBuffer.swift.
     let buffer = MessageBuffer()
     public static func register(with registrar: FlutterPluginRegistrar) {
@@ -17,12 +19,30 @@ public class PushEngageFlutterSdkPlugin: NSObject,
         registrar.addMethodCallDelegate(instance, channel: channel)
         registrar.addApplicationDelegate(instance)
 
+        // Apps on the UIScene life cycle (required when building with the
+        // iOS 27 SDK) register plugins only when the scene connects, after
+        // UIKit's didFinishLaunching has returned. Older Flutter versions
+        // (seen on 3.35) never forward didFinishLaunching to plugins
+        // registered that late, so configure the SDK here. Apps without scenes
+        // register plugins inside their AppDelegate's didFinishLaunching, so
+        // setup still runs during launch for them.
+        instance.configureSDK(for: UIApplication.shared)
     }
 
     public func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [AnyHashable: Any] = [:]
     ) -> Bool {
+        configureSDK(for: application)
+        return true
+    }
+
+    /// Hands the application to the native SDK and installs the notification-open
+    /// and IAM custom-action handlers. Runs once, from whichever of
+    /// `register(with:)` / `didFinishLaunching` comes first.
+    private func configureSDK(for application: UIApplication) {
+        guard !PushEngageFlutterSdkPlugin.didConfigureSDK else { return }
+        PushEngageFlutterSdkPlugin.didConfigureSDK = true
 
         PushEngage.setInitialInfo(for: application, with: [:])
 
@@ -41,7 +61,18 @@ public class PushEngageFlutterSdkPlugin: NSObject,
             self?.buffer.deliver(arguments)
         }
 
-        return true
+        // Forward in-app message custom-action taps to Dart. No MessageBuffer
+        // routing: custom actions only fire on user taps inside a displayed
+        // message, which cannot happen before Dart is up. The SDK handles
+        // open_url/dismiss/request_notification_permission actions itself —
+        // only `custom` actions reach this handler.
+        PushEngage.setIAMCustomActionHandler { actionId, parameters in
+            DispatchQueue.main.async {
+                PushEngageFlutterSdkPlugin.channel?.invokeMethod(
+                    "onIAMCustomAction",
+                    arguments: ["actionId": actionId, "parameters": parameters])
+            }
+        }
     }
 
     //this is very important for background notifications - otherwise subscription happens everytime
@@ -467,6 +498,36 @@ public class PushEngageFlutterSdkPlugin: NSObject,
                             FlutterError(
                                 code: "LOGOUT_FAILED", message: "Logout failed", details: nil))
                     }
+                }
+            }
+
+        case "PushEngage#triggerIAMEvent":
+            guard let args = call.arguments as? [String: Any],
+                let eventName = args["eventName"] as? String, !eventName.isEmpty
+            else {
+                result(
+                    FlutterError(
+                        code: "400", message: "Event name is required",
+                        details: nil))
+                return
+            }
+            let parameters = args["parameters"] as? [String: Any]
+            PushEngage.triggerIAMEvent(eventName: eventName, parameters: parameters) {
+                response, error in
+                if let error = error {
+                    result(
+                        FlutterError(
+                            code: "TRIGGER_IN_APP_EVENT_ERROR",
+                            message: error.localizedDescription,
+                            details: nil))
+                } else if response {
+                    result("In-app message event triggered successfully")
+                } else {
+                    result(
+                        FlutterError(
+                            code: "TRIGGER_IN_APP_EVENT_FAILED",
+                            message: "Failed to trigger in-app message event",
+                            details: nil))
                 }
             }
 
