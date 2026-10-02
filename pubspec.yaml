@@ -1,13 +1,19 @@
 name: pushengage_flutter_sdk
-description: PushEngage Flutter Plugin allows you to integrate Push Notification service into your Flutter application.
+description: PushEngage SDK for Flutter - push notifications (FCM and APNs) and In-App Messaging for Android and iOS apps.
 
-version: 1.0.0
+version: 1.1.0
 homepage: https://github.com/awesomemotive/pushengage-flutter-sdk
 repository: https://github.com/awesomemotive/pushengage-flutter-sdk
+topics:
+  - push-notifications
+  - notifications
+  - fcm
+  - apns
+  - in-app-messaging
 
 environment:
   sdk: ">=3.4.3 <4.0.0"
-  flutter: ">=3.3.0"
+  flutter: ">=3.22.2"
 
 dependencies:
   flutter:

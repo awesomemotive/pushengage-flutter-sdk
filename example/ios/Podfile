@@ -1,9 +1,11 @@
 # Define minimum iOS platform version
-platform :ios, '13.0'
+platform :ios, '15.0'
 
-# Released PushEngage iOS SDK 1.0.0. In 1.0.0 the SDK is split into the app pod
-# `PushEngage` (which depends on `PushEngageExtension`) and the extension-safe
-# `PushEngageExtension`. Both are published on CocoaPods trunk.
+# PushEngage iOS SDK — published pods. The SDK is split into two pods:
+# 'PushEngage' (app target) and the extension-safe 'PushEngageExtension'
+# (linked by the extension targets below). Keep in step with the plugin
+# podspec's `s.dependency 'PushEngage'`.
+pushengage_ios_sdk_version = '1.1.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -35,10 +37,8 @@ target 'Runner' do
   use_frameworks!
   use_modular_headers!
 
-  # Released PushEngage 1.0.0 from CocoaPods trunk, matching the version the
-  # plugin's podspec declares. PushEngageExtension is pulled in transitively as
-  # PushEngage's dependency.
-  pod 'PushEngage', '1.0.0'
+  pod 'PushEngage', pushengage_ios_sdk_version
+  pod 'PushEngageExtension', pushengage_ios_sdk_version
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 #  target 'RunnerTests' do
@@ -53,15 +53,24 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+
+    # Xcode 27 rejects any target below iOS 15.0. The Flutter pod and some
+    # plugins (e.g. shared_preferences_foundation) still declare 13.0, so
+    # apply a floor to every pod target.
+    target.build_configurations.each do |config|
+      if config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f < 15.0
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      end
+    end
   end
 end
 
 target 'NotificationServiceExtension' do
   use_frameworks!
-  pod 'PushEngageExtension', '1.0.0'
+  pod 'PushEngageExtension', pushengage_ios_sdk_version
 end
 
 target 'NotificationContentExtension' do
   use_frameworks!
-  pod 'PushEngageExtension', '1.0.0'
+  pod 'PushEngageExtension', pushengage_ios_sdk_version
 end

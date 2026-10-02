@@ -11,6 +11,7 @@ import 'package:pushengage_flutter_sdk/model/trigger_campaign.dart';
 import 'package:pushengage_flutter_sdk/model/fcm_config_error.dart';
 import 'package:pushengage_flutter_sdk/model/environment.dart';
 import 'package:pushengage_flutter_sdk/model/identify_fields.dart';
+import 'package:pushengage_flutter_sdk/model/iam_custom_action.dart';
 import 'package:pushengage_flutter_sdk/model/track_event_payload.dart';
 import 'package:pushengage_flutter_sdk/helper/pushengage_result.dart';
 
@@ -22,6 +23,7 @@ export 'package:pushengage_flutter_sdk/model/environment.dart';
 export 'package:pushengage_flutter_sdk/model/fcm_config_error.dart';
 export 'package:pushengage_flutter_sdk/model/goal.dart';
 export 'package:pushengage_flutter_sdk/model/identify_fields.dart';
+export 'package:pushengage_flutter_sdk/model/iam_custom_action.dart';
 export 'package:pushengage_flutter_sdk/model/track_event_payload.dart';
 export 'package:pushengage_flutter_sdk/model/trigger_alert.dart';
 export 'package:pushengage_flutter_sdk/model/trigger_campaign.dart';
@@ -30,8 +32,9 @@ class PushEngage {
   static const MethodChannel _channel = MethodChannel('PushEngage');
   static StreamController<Map<String, dynamic>>? _deepLinkController;
   static StreamController<FcmConfigError>? _fcmErrorController;
+  static StreamController<IAMCustomAction>? _iamCustomActionController;
   static bool _listenersAttached = false;
-  static const _sdkVersion = "1.0.0";
+  static const _sdkVersion = "1.1.0";
 
   /// A stream of deep link data emitted when a notification is tapped while
   /// the app is running. Lazily initialized as a broadcast stream so multiple
@@ -55,6 +58,17 @@ class PushEngage {
     return _fcmErrorController!.stream;
   }
 
+  /// A stream of in-app message custom actions.
+  ///
+  /// Emits an [IAMCustomAction] when the user taps a `custom`-type action
+  /// button inside a displayed in-app message. The native SDKs handle
+  /// `open_url`, `dismiss`, and `request_notification_permission` action
+  /// types internally — only `custom` actions reach this stream.
+  static Stream<IAMCustomAction> get onIAMCustomAction {
+    _ensureListeners();
+    return _iamCustomActionController!.stream;
+  }
+
   /// Installs the single native→Dart method-call handler (once) and signals
   /// native that Dart is ready. On iOS this drains the cold-boot replay queue
   /// and routes runtime taps through `onDeepLink`; on Android it is a no-op.
@@ -64,6 +78,8 @@ class PushEngage {
     // regardless of which stream the consumer subscribed to first.
     _deepLinkController ??= StreamController<Map<String, dynamic>>.broadcast();
     _fcmErrorController ??= StreamController<FcmConfigError>.broadcast();
+    _iamCustomActionController ??=
+        StreamController<IAMCustomAction>.broadcast();
     if (_listenersAttached) return;
     _listenersAttached = true;
     _channel.setMethodCallHandler(_handleNativeCall);
@@ -102,6 +118,13 @@ class PushEngage {
         _fcmErrorController?.add(FcmConfigError(
           code: map['code'] as int,
           message: map['message'] as String,
+        ));
+        break;
+      case 'onIAMCustomAction':
+        final map = Map<String, dynamic>.from(call.arguments as Map);
+        _iamCustomActionController?.add(IAMCustomAction(
+          actionId: map['actionId'] as String,
+          parameters: Map<String, String>.from(map['parameters'] as Map),
         ));
         break;
     }
@@ -759,6 +782,32 @@ class PushEngage {
     try {
       final result = await _channel.invokeMethod<String>(
           'PushEngage#trackEvent', event.toMap());
+      return PushEngageResult.success(result);
+    } catch (e) {
+      return PushEngageResult.failure(e);
+    }
+  }
+
+  /// Triggers an in-app message event with the specified name and parameters.
+  ///
+  /// In-app messages configured on the dashboard with a matching custom
+  /// trigger event are displayed when this fires. Parameter values should be
+  /// a `String`, `num` or `bool` (the same set the React Native SDK allows;
+  /// Dart has no union type to enforce it). Values are stringified natively
+  /// before trigger matching, so numbers/booleans are compared as strings
+  /// (`2` matches `"2"`). Any other value type is not rejected but is handled
+  /// differently per platform — Android compares its `toString()`, iOS drops
+  /// the key from trigger matching entirely — so do not rely on it.
+  ///
+  /// Requires the SDK to be initialized via [setAppId] first. In-app
+  /// messaging works independently of the push subscription — no
+  /// notification permission is required.
+  static Future<PushEngageResult<String?>> triggerIAMEvent(String eventName,
+      [Map<String, dynamic>? parameters]) async {
+    try {
+      final result = await _channel.invokeMethod<String>(
+          'PushEngage#triggerIAMEvent',
+          {'eventName': eventName, 'parameters': parameters});
       return PushEngageResult.success(result);
     } catch (e) {
       return PushEngageResult.failure(e);

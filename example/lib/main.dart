@@ -5,6 +5,7 @@ import 'demo_prefs.dart';
 import 'demo_theme.dart';
 import 'screens/alert_entry_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/in_app_messaging_screen.dart';
 import 'screens/send_goal_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/track_event_screen.dart';
@@ -39,6 +40,7 @@ class DemoApp extends StatelessWidget {
         '/triggerCampaigns': (_) => const TriggerCampaignsScreen(),
         '/triggerCampaignEntry': (_) => const TriggerCampaignEntryScreen(),
         '/alertEntry': (_) => const AlertEntryScreen(),
+        '/inAppMessaging': (_) => const InAppMessagingScreen(),
       },
     );
   }

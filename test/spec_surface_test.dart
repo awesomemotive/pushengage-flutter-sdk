@@ -46,15 +46,18 @@ void main() {
       PushEngage.logout,
       PushEngage.trackEvent,
       PushEngage.runConfigValidation,
+      PushEngage.triggerIAMEvent,
     ];
     for (final m in members) {
       expect(m, isA<Function>());
     }
   });
 
-  test('exposes the deepLink and FCM config-error streams', () {
+  test('exposes the deepLink, FCM config-error, and IAM custom-action streams',
+      () {
     messenger.setMockMethodCallHandler(channel, (c) async => null);
     expect(PushEngage.deepLinkStream, isA<Stream<Map<String, dynamic>?>>());
     expect(PushEngage.onFcmConfigError, isA<Stream<FcmConfigError>>());
+    expect(PushEngage.onIAMCustomAction, isA<Stream<IAMCustomAction>>());
   });
 }
